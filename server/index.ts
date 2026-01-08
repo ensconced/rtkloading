@@ -67,6 +67,21 @@ app.patch('/api/screenings/:id', async (req, res) => {
   res.json(screening)
 })
 
+// POST rescreen - mutates the risk score
+app.post('/api/screenings/:id/rescreen', async (req, res) => {
+  await delay(DELAY_MS)
+  const db = readDB()
+  const id = parseInt(req.params.id)
+  const screening = db.screenings.find((s) => s.id === id)
+  if (!screening) {
+    return res.status(404).json({ error: 'Screening not found' })
+  }
+  // Generate a new random risk score between 0 and 10
+  screening.riskScore = Math.round(Math.random() * 100) / 10
+  writeDB(db)
+  res.json(screening)
+})
+
 const PORT = 3001
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`)

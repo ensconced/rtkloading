@@ -3,13 +3,15 @@ import {
   useGetScreeningListQuery,
   useGetScreeningQuery,
   useUpdateScreeningMutation,
+  useRescreenScreeningMutation,
 } from './screeningsApi'
 
 function App() {
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [rescreeningId, setRescreeningId] = useState<number | null>(null)
 
   const { data: screenings, isLoading: isListLoading } = useGetScreeningListQuery()
-  const { data: screening, isFetching: isScreeningFetching } = useGetScreeningQuery(
+  const { data: screening, isFetching: isScreeningFetching, refetch } = useGetScreeningQuery(
     selectedId!,
     { skip: !selectedId }
   )
@@ -17,6 +19,19 @@ function App() {
   // Show loading when switching to a different screening (not on revalidation of the same one)
   const isLoadingNewScreening = isScreeningFetching && screening?.id !== selectedId
   const [updateScreening] = useUpdateScreeningMutation()
+  const [rescreenScreening] = useRescreenScreeningMutation()
+
+  const handleRescreen = async (id: number) => {
+    setRescreeningId(id)
+    try {
+      await rescreenScreening(id).unwrap()
+      await refetch().unwrap()
+    } finally {
+      setRescreeningId(null)
+    }
+  }
+
+  const isRescreening = rescreeningId === selectedId
 
   const getRiskColor = (score: number) => {
     if (score >= 7) return '#ef4444'
@@ -56,9 +71,9 @@ function App() {
         </div>
 
         <div style={styles.details}>
-          {isLoadingNewScreening && <div style={styles.loadingSmall}>Loading...</div>}
+          {(isLoadingNewScreening || isRescreening) && <div style={styles.loadingSmall}>Loading...</div>}
           
-          {screening && !isLoadingNewScreening && (
+          {screening && !isLoadingNewScreening && !isRescreening && (
             <div style={styles.card}>
               
               <h2 style={styles.screeningTitle}>
@@ -73,6 +88,17 @@ function App() {
                 }}>
                   {screening.riskScore.toFixed(1)}
                 </span>
+                <button
+                  onClick={() => handleRescreen(screening.id)}
+                  disabled={isRescreening}
+                  style={{
+                    ...styles.rescreenButton,
+                    opacity: isRescreening ? 0.6 : 1,
+                    cursor: isRescreening ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {isRescreening ? 'Rescreening...' : 'Rescreen'}
+                </button>
               </div>
               
               <div style={styles.field}>
@@ -134,6 +160,56 @@ function App() {
               <p>← Select a screening to view details</p>
             </div>
           )}
+        </div>
+      </div>
+
+      <div style={styles.explanation}>
+        <h2 style={styles.explanationTitle}>How Loading States Work</h2>
+        
+        <div style={styles.explanationSection}>
+          <h3 style={styles.explanationHeading}>1. Selecting a Screening</h3>
+          <p style={styles.explanationText}>
+            When you click a screening from the list, <code style={styles.code}>isLoadingNewScreening</code> is calculated as{' '}
+            <code style={styles.code}>isFetching && screening?.id !== selectedId</code>. This shows the loading state only when 
+            switching to a <em>different</em> screening, not during background revalidations of the current one.
+          </p>
+        </div>
+
+        <div style={styles.explanationSection}>
+          <h3 style={styles.explanationHeading}>2. Status & Assignee Updates (Optimistic)</h3>
+          <p style={styles.explanationText}>
+            The Status and Assignee buttons use <code style={styles.code}>optimistic updates</code> via{' '}
+            <code style={styles.code}>onQueryStarted</code>. The UI updates instantly by patching the cache with{' '}
+            <code style={styles.code}>updateQueryData</code>, then reverts if the server request fails. No loading state 
+            is shown because the update appears immediate.
+          </p>
+        </div>
+
+        <div style={styles.explanationSection}>
+          <h3 style={styles.explanationHeading}>3. Rescreen Button (Mutation + Refetch)</h3>
+          <p style={styles.explanationText}>
+            The Rescreen button needs to show a loading state through <em>both</em> the mutation and the subsequent data refetch. 
+            This is tricky because RTK Query's <code style={styles.code}>invalidatesTags</code> triggers a refetch that runs 
+            independently of the mutation's promise.
+          </p>
+          <p style={styles.explanationText}>
+            <strong>Solution:</strong> We use local state (<code style={styles.code}>rescreeningId</code>) set before the mutation 
+            and cleared only after both operations complete:
+          </p>
+          <pre style={styles.codeBlock}>{`const handleRescreen = async (id: number) => {
+  setRescreeningId(id)        // Start loading
+  try {
+    await rescreenScreening(id).unwrap()  // Wait for mutation
+    await refetch().unwrap()              // Wait for refetch
+  } finally {
+    setRescreeningId(null)    // End loading
+  }
+}`}</pre>
+          <p style={styles.explanationText}>
+            By manually calling <code style={styles.code}>refetch().unwrap()</code> and awaiting it, we ensure the loading 
+            state persists until the fresh data is actually loaded. The <code style={styles.code}>finally</code> block 
+            guarantees cleanup even if an error occurs.
+          </p>
         </div>
       </div>
     </div>
@@ -259,6 +335,17 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     color: '#fff',
   },
+  rescreenButton: {
+    marginLeft: 'auto',
+    padding: '8px 16px',
+    backgroundColor: '#3b82f6',
+    border: 'none',
+    borderRadius: '6px',
+    fontSize: '0.875rem',
+    fontWeight: 500,
+    color: '#fff',
+    transition: 'all 0.15s ease',
+  },
   field: {
     marginBottom: '20px',
   },
@@ -304,6 +391,47 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: '#1e1e1e',
     borderRadius: '12px',
     border: '1px dashed #3a3a3a',
+  },
+  explanation: {
+    marginTop: '60px',
+    padding: '32px',
+    backgroundColor: '#1a1a1a',
+    borderRadius: '12px',
+    border: '1px solid #2a2a2a',
+  },
+  explanationTitle: {
+    fontSize: '1.5rem',
+    fontWeight: 600,
+    color: '#fff',
+    marginBottom: '24px',
+    paddingBottom: '16px',
+    borderBottom: '1px solid #2a2a2a',
+  },
+  explanationSection: {
+    marginBottom: '24px',
+  },
+  explanationHeading: {
+    fontSize: '1.1rem',
+    fontWeight: 600,
+    color: '#3b82f6',
+    marginBottom: '12px',
+  },
+  explanationText: {
+    fontSize: '0.95rem',
+    lineHeight: 1.7,
+    color: '#b0b0b0',
+    marginBottom: '12px',
+  },
+  codeBlock: {
+    backgroundColor: '#252525',
+    padding: '16px',
+    borderRadius: '8px',
+    fontSize: '0.85rem',
+    fontFamily: 'monospace',
+    color: '#e5e5e5',
+    overflowX: 'auto',
+    marginBottom: '12px',
+    whiteSpace: 'pre',
   },
 }
 

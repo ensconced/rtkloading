@@ -58,6 +58,14 @@ export const screeningsApi = createApi({
         }
       },
     }),
+
+    // POST rescreen - generates a new risk score
+    rescreenScreening: builder.mutation<Screening, number>({
+      query: (id) => ({
+        url: `screenings/${id}/rescreen`,
+        method: 'POST',
+      }),
+    }),
   }),
 })
 
@@ -65,4 +73,5 @@ export const {
   useGetScreeningListQuery,
   useGetScreeningQuery,
   useUpdateScreeningMutation,
+  useRescreenScreeningMutation,
 } = screeningsApi
