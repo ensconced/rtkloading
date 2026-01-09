@@ -640,101 +640,106 @@ function App() {
         <div style={styles.explanation}>
           <h2 style={styles.explanationTitle}>How It All Works</h2>
           
+          <div style={{...styles.explanationItem, borderLeftColor: '#58a6ff', backgroundColor: '#58a6ff11', padding: '16px', borderRadius: '0 8px 8px 0'}}>
+            <div style={styles.explanationTerm}>The "Current" Cache Entry</div>
+            <div style={styles.explanationDesc}>
+              When you call <code style={styles.highlight}>useGetItemQuery({"{"}id: 2, forceError: false{"}"})</code>, 
+              RTK Query looks up (or creates) a <strong>cache entry</strong> for that exact argument. This is the 
+              <strong> "current" cache entry</strong> for this hook instance.
+              <br/><br/>
+              <strong>Almost all values returned by the hook refer to this current cache entry:</strong>
+              <br/>• <code style={styles.highlight}>isFetching</code> — is the <em>current</em> cache entry fetching?
+              <br/>• <code style={styles.highlight}>isError</code> — did the <em>current</em> cache entry error?
+              <br/>• <code style={styles.highlight}>currentData</code> — data from the <em>current</em> cache entry
+              <br/>• <code style={styles.highlight}>error</code> — error from the <em>current</em> cache entry
+              <br/><br/>
+              When you change the argument (e.g. switch from id=1 to id=2), you're <strong>switching which cache entry 
+              is "current"</strong>. The hook immediately starts reporting on the new cache entry.
+              <br/><br/>
+              <strong>The exceptions</strong> are <code style={styles.highlight}>data</code> and 
+              <code style={styles.highlight}>isLoading</code>, which behave differently (see below).
+            </div>
+          </div>
+
           <div style={styles.explanationItem}>
-            <div style={styles.explanationTerm}>data vs currentData</div>
+            <div style={styles.explanationTerm}>data — the exception to "current"</div>
             <div style={styles.explanationDesc}>
               <code style={styles.highlight}>data</code> is <strong>"sticky"</strong> — it holds the last successful result 
-              <strong> regardless of which argument it came from</strong>. When you switch from Item 1 to Item 2, 
+              <strong> regardless of which cache entry it came from</strong>. When you switch from Item 1 to Item 2, 
               <code style={styles.highlight}>data</code> keeps showing Item 1's data until Item 2's request completes.
               <br/><br/>
-              <code style={styles.highlight}>currentData</code> is <strong>"strict"</strong> — it only contains data 
-              if it's for the <strong>current argument</strong>. When you switch args, it immediately becomes 
-              <code style={styles.highlight}>undefined</code> until the new data arrives.
+              This is deliberate: it lets you keep showing <em>something</em> while the new data loads, 
+              rather than flashing to empty/loading state.
               <br/><br/>
-              <strong>Use case:</strong> Use <code style={styles.highlight}>data</code> when you want to keep showing 
-              stale content while loading. Use <code style={styles.highlight}>currentData</code> when you want to show 
-              a loading state immediately upon arg change.
+              <strong>Contrast with <code style={styles.highlight}>currentData</code>:</strong> which <em>is</em> tied 
+              to the current cache entry. When you switch args, <code style={styles.highlight}>currentData</code> 
+              immediately becomes <code style={styles.highlight}>undefined</code> until the new data arrives.
             </div>
           </div>
 
           <div style={styles.explanationItem}>
-            <div style={styles.explanationTerm}>isLoading</div>
+            <div style={styles.explanationTerm}>isLoading — also not purely "current"</div>
             <div style={styles.explanationDesc}>
-              <code style={styles.highlight}>isLoading</code> is <strong>true when fetching AND 
-              <code style={styles.highlight}>data</code> is undefined</strong>. Since <code style={styles.highlight}>data</code> is 
-              sticky (persists across arg changes), <code style={styles.highlight}>isLoading</code> is only true on 
-              the <strong>very first fetch</strong> before any data has ever been loaded.
+              <code style={styles.highlight}>isLoading</code> is defined as: <strong>fetching the current cache entry 
+              AND <code style={styles.highlight}>data</code> is undefined</strong>.
               <br/><br/>
-              Once you've loaded <em>any</em> item successfully, <code style={styles.highlight}>isLoading</code> will 
-              be <code style={styles.highlight}>false</code> even when switching to uncached items — because 
-              <code style={styles.highlight}>data</code> still holds the previous item's data.
+              Since <code style={styles.highlight}>data</code> is sticky (not tied to current), 
+              <code style={styles.highlight}>isLoading</code> is only <code style={styles.highlight}>true</code> on 
+              the <strong>very first fetch ever</strong>, before any data from any arg has loaded.
               <br/><br/>
-              <strong>In practice:</strong> <code style={styles.highlight}>isLoading</code> is for showing an initial 
-              loading skeleton on first page load, not for showing loading states when switching between items.
+              Once you've loaded <em>any</em> item, <code style={styles.highlight}>isLoading</code> stays 
+              <code style={styles.highlight}>false</code> — even when fetching a brand new uncached item.
+              <br/><br/>
+              <strong>Use case:</strong> Show an initial loading skeleton on first page load. Don't use it for 
+              "loading state when switching items" — use <code style={styles.highlight}>isFetching</code> or 
+              check <code style={styles.highlight}>currentData === undefined</code> for that.
             </div>
           </div>
 
           <div style={styles.explanationItem}>
-            <div style={styles.explanationTerm}>isFetching</div>
+            <div style={styles.explanationTerm}>isFetching — purely about the current cache entry</div>
             <div style={styles.explanationDesc}>
-              <code style={styles.highlight}>isFetching</code> is <strong>true whenever a request is in flight</strong> — 
-              whether it's an initial load, a refetch, or a fetch after switching args.
+              <code style={styles.highlight}>isFetching</code> is <strong>true whenever the current cache entry 
+              has a request in flight</strong> — initial load, refetch, or revalidation.
               <br/><br/>
-              Unlike <code style={styles.highlight}>isLoading</code>, it doesn't care whether 
-              <code style={styles.highlight}>data</code> exists. It purely tracks network activity for the current subscription.
+              It doesn't care whether <code style={styles.highlight}>data</code> exists. It purely tracks: 
+              "is there an active network request for the cache entry I'm subscribed to?"
               <br/><br/>
-              <strong>In practice:</strong> Use <code style={styles.highlight}>isFetching</code> to show a subtle 
-              loading indicator (like a spinner in the corner) while keeping existing content visible.
+              <strong>Important:</strong> If <em>another</em> component is fetching a different cache entry 
+              (e.g. id=3 while you're viewing id=1), your hook's <code style={styles.highlight}>isFetching</code> 
+              is still <code style={styles.highlight}>false</code>. Each hook only reports on its own subscription.
             </div>
           </div>
 
           <div style={styles.explanationItem}>
-            <div style={styles.explanationTerm}>Errors and data</div>
+            <div style={styles.explanationTerm}>Errors</div>
             <div style={styles.explanationDesc}>
+              <code style={styles.highlight}>isError</code> and <code style={styles.highlight}>error</code> are 
+              about the <strong>current cache entry</strong>.
+              <br/><br/>
               When an error occurs, <code style={styles.highlight}>data</code> is <strong>preserved</strong> — it still 
-              contains the last successful result (if any). This lets you show stale data alongside an error message.
+              holds the last successful result (possibly from a different arg). This lets you show stale data 
+              alongside an error message.
               <br/><br/>
-              <code style={styles.highlight}>currentData</code> behaves the same way — it keeps the last successful 
-              data for the current arg, even after an error.
+              <code style={styles.highlight}>currentData</code> also preserves the last successful data for the 
+              current arg specifically, even after an error on that same arg.
               <br/><br/>
-              <code style={styles.highlight}>isLoading</code> and <code style={styles.highlight}>isFetching</code> 
-              are both <code style={styles.highlight}>false</code> when in an error state (the request has completed, 
-              just unsuccessfully).
-              <br/><br/>
-              <strong>In practice:</strong> You can show both the error AND the stale data, letting users see what 
-              they had before while knowing something went wrong.
+              <code style={styles.highlight}>isFetching</code> is <code style={styles.highlight}>false</code> in 
+              error state — the request completed (just unsuccessfully).
             </div>
           </div>
 
           <div style={styles.explanationItem}>
-            <div style={styles.explanationTerm}>Retrying after an error</div>
+            <div style={styles.explanationTerm}>Cache keys include the full argument</div>
             <div style={styles.explanationDesc}>
-              If you retry a failed request (via refetch or invalidation), <code style={styles.highlight}>isLoading</code> 
-              will be <code style={styles.highlight}>false</code> during the retry — because 
-              <code style={styles.highlight}>data</code> still exists from before the error (or from a different arg).
+              In this testbed, the argument is <code style={styles.highlight}>{"{"}id, forceError{"}"}</code>. 
+              That means <code style={styles.highlight}>{"{"}id: 1, forceError: false{"}"}</code> and 
+              <code style={styles.highlight}>{"{"}id: 1, forceError: true{"}"}</code> are 
+              <strong> different cache entries</strong>.
               <br/><br/>
-              <code style={styles.highlight}>isFetching</code> will be <code style={styles.highlight}>true</code> 
-              during the retry, as expected.
-              <br/><br/>
-              If the cache entry had <em>never</em> succeeded (error on first load), then 
-              <code style={styles.highlight}>isLoading</code> would be <code style={styles.highlight}>true</code> 
-              on retry — but only if no other arg's data is in <code style={styles.highlight}>data</code>.
-            </div>
-          </div>
-
-          <div style={styles.explanationItem}>
-            <div style={styles.explanationTerm}>Cache entries</div>
-            <div style={styles.explanationDesc}>
-              Each unique argument creates a <strong>separate cache entry</strong>. In this testbed, the full arg 
-              is <code style={styles.highlight}>{"{"}id, forceError{"}"}</code>, so toggling "Force errors" 
-              switches to a different cache entry entirely.
-              <br/><br/>
-              <code style={styles.highlight}>isLoading</code> and <code style={styles.highlight}>isFetching</code> 
-              are about the <strong>current subscription</strong> (the cache entry for the current arg), 
-              not about "any cache entry loading anywhere."
-              <br/><br/>
-              <strong>Key insight:</strong> The hook returns values for the arg you pass in. Other cache entries 
-              might be loading in the background (from other components), but this hook only reports on its own subscription.
+              Toggling "Force errors" doesn't just change behavior — it switches you to an entirely different 
+              cache entry, with its own <code style={styles.highlight}>isFetching</code>, 
+              <code style={styles.highlight}>isError</code>, <code style={styles.highlight}>currentData</code>, etc.
             </div>
           </div>
         </div>
