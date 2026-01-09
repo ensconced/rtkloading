@@ -301,6 +301,9 @@ function App() {
   const prevStateRef = useRef<string>('')
   const logContainerRef = useRef<HTMLDivElement>(null)
   
+  // Track when entries became unsubscribed (for countdown display)
+  const unsubscribedAtRef = useRef<Record<string, number>>({})
+  
   // Force re-render every second to update cache expiry countdowns
   const [, setTick] = useState(0)
   useEffect(() => {
@@ -643,6 +646,24 @@ function App() {
               const subCount = Object.keys(entrySubs).length
               const isCurrentlySelected = id === selectedId
               
+              // Track when entries become unsubscribed
+              if (entry && subCount === 0) {
+                if (!unsubscribedAtRef.current[cacheKey]) {
+                  unsubscribedAtRef.current[cacheKey] = Date.now()
+                }
+              } else {
+                delete unsubscribedAtRef.current[cacheKey]
+              }
+              
+              // Calculate countdown
+              const unsubscribedAt = unsubscribedAtRef.current[cacheKey]
+              const KEEP_UNUSED_FOR = 10 // seconds
+              let secondsRemaining = 0
+              if (unsubscribedAt) {
+                const elapsed = (Date.now() - unsubscribedAt) / 1000
+                secondsRemaining = Math.max(0, Math.ceil(KEEP_UNUSED_FOR - elapsed))
+              }
+              
               // Skip entries that don't exist and aren't currently selected
               if (!entry && !isCurrentlySelected) return null
               
@@ -677,9 +698,14 @@ function App() {
                         }}>
                           {subCount}
                         </span>
-                        {subCount === 0 && (
-                          <span style={{ color: '#d29922', fontSize: '0.7rem', marginLeft: '4px' }}>
-                            (will expire)
+                        {subCount === 0 && secondsRemaining > 0 && (
+                          <span style={{ 
+                            color: secondsRemaining <= 3 ? '#f85149' : '#d29922', 
+                            fontSize: '0.75rem', 
+                            marginLeft: '6px',
+                            fontWeight: 600,
+                          }}>
+                            expires in {secondsRemaining}s
                           </span>
                         )}
                       </div>
