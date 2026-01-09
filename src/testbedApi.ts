@@ -39,6 +39,10 @@ export const testbedApi = createApi({
         url: `items/${id}`,
         params: forceError ? { fail: 'true' } : undefined,
       }),
+      // Only use `id` for the cache key — forceError just affects the request, not the cache entry
+      serializeQueryArgs: ({ queryArgs }) => {
+        return queryArgs.id
+      },
       providesTags: (_result, _error, { id }) => [{ type: 'Item', id }],
     }),
   }),

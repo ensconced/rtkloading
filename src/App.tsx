@@ -632,79 +632,76 @@ function App() {
         <div style={{ ...styles.section, ...styles.cacheSection }}>
           <h2 style={styles.sectionTitle}>Cache State (all entries for getItem)</h2>
           <div style={{ fontSize: '0.75rem', color: '#8b949e', marginBottom: '12px' }}>
-            Each unique arg combo creates a separate cache entry. Unused entries expire after 10s.
+            Each unique id creates a separate cache entry. Unused entries expire after 10s.
           </div>
           
           <div style={styles.cacheEntries}>
-            {[1, 2, 3].flatMap(id => 
-              [false, true].map(fe => {
-                const cacheKey = `getItem({"forceError":${fe},"id":${id}})`
-                const altCacheKey = `getItem({"id":${id},"forceError":${fe}})`
-                const entry = cacheState[cacheKey] || cacheState[altCacheKey]
-                const entrySubs = subscriptions[cacheKey] || subscriptions[altCacheKey] || {}
-                const subCount = Object.keys(entrySubs).length
-                const isCurrentlySelected = id === selectedId && fe === forceError
-                
-                // Skip entries that don't exist and aren't currently selected
-                if (!entry && !isCurrentlySelected) return null
-                
-                return (
-                  <div 
-                    key={`${id}-${fe}`} 
-                    style={{
-                      ...styles.cacheEntry,
-                      borderColor: isCurrentlySelected ? '#58a6ff' : entry?.status === 'rejected' ? '#f85149' : '#30363d',
-                      borderWidth: isCurrentlySelected ? 2 : 1,
-                      opacity: entry ? 1 : 0.5,
-                    }}
-                  >
-                    <div style={styles.cacheEntryLabel}>
-                      id={id}, forceError={String(fe)}{isCurrentlySelected && ' ← current'}
-                    </div>
-                    {entry ? (
-                      <>
-                        <div style={{ color: '#8b949e', marginBottom: '4px' }}>
-                          status: <span style={{ 
-                            color: entry.status === 'fulfilled' ? '#3fb950' : 
-                                   entry.status === 'pending' ? '#d29922' : 
-                                   entry.status === 'rejected' ? '#f85149' : '#c9d1d9' 
-                          }}>
-                            {entry.status}
-                          </span>
-                        </div>
-                        <div style={{ color: '#8b949e', marginBottom: '4px' }}>
-                          subscribers: <span style={{ 
-                            color: subCount > 0 ? '#3fb950' : '#d29922',
-                            fontWeight: subCount > 0 ? 600 : 400,
-                          }}>
-                            {subCount}
-                          </span>
-                          {subCount === 0 && (
-                            <span style={{ color: '#d29922', fontSize: '0.7rem', marginLeft: '4px' }}>
-                              (will expire)
-                            </span>
-                          )}
-                        </div>
-                        {entry.data && (
-                          <div style={{ color: '#8b949e' }}>
-                            fetchCount: <span style={{ color: '#c9d1d9' }}>{(entry.data as Item).fetchCount}</span>
-                          </div>
-                        )}
-                        {entry.error && (
-                          <div style={{ color: '#f85149', fontSize: '0.75rem' }}>
-                            has error
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <div style={{ color: '#8b949e', fontStyle: 'italic' }}>
-                        {isCurrentlySelected ? '(fetching...)' : '(no entry)'}
-                      </div>
-                    )}
+            {[1, 2, 3].map(id => {
+              const cacheKey = `getItem(${id})`
+              const entry = cacheState[cacheKey]
+              const entrySubs = subscriptions[cacheKey] || {}
+              const subCount = Object.keys(entrySubs).length
+              const isCurrentlySelected = id === selectedId
+              
+              // Skip entries that don't exist and aren't currently selected
+              if (!entry && !isCurrentlySelected) return null
+              
+              return (
+                <div 
+                  key={id} 
+                  style={{
+                    ...styles.cacheEntry,
+                    borderColor: isCurrentlySelected ? '#58a6ff' : entry?.status === 'rejected' ? '#f85149' : '#30363d',
+                    borderWidth: isCurrentlySelected ? 2 : 1,
+                    opacity: entry ? 1 : 0.5,
+                  }}
+                >
+                  <div style={styles.cacheEntryLabel}>
+                    getItem({id}){isCurrentlySelected && ' ← current'}
                   </div>
-                )
-              })
-            ).filter(Boolean)}
+                  {entry ? (
+                    <>
+                      <div style={{ color: '#8b949e', marginBottom: '4px' }}>
+                        status: <span style={{ 
+                          color: entry.status === 'fulfilled' ? '#3fb950' : 
+                                 entry.status === 'pending' ? '#d29922' : 
+                                 entry.status === 'rejected' ? '#f85149' : '#c9d1d9' 
+                        }}>
+                          {entry.status}
+                        </span>
+                      </div>
+                      <div style={{ color: '#8b949e', marginBottom: '4px' }}>
+                        subscribers: <span style={{ 
+                          color: subCount > 0 ? '#3fb950' : '#d29922',
+                          fontWeight: subCount > 0 ? 600 : 400,
+                        }}>
+                          {subCount}
+                        </span>
+                        {subCount === 0 && (
+                          <span style={{ color: '#d29922', fontSize: '0.7rem', marginLeft: '4px' }}>
+                            (will expire)
+                          </span>
+                        )}
+                      </div>
+                      {entry.data && (
+                        <div style={{ color: '#8b949e' }}>
+                          fetchCount: <span style={{ color: '#c9d1d9' }}>{(entry.data as Item).fetchCount}</span>
+                        </div>
+                      )}
+                      {entry.error && (
+                        <div style={{ color: '#f85149', fontSize: '0.75rem' }}>
+                          has error
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div style={{ color: '#8b949e', fontStyle: 'italic' }}>
+                      {isCurrentlySelected ? '(fetching...)' : '(no entry)'}
+                    </div>
+                  )}
+                </div>
+              )
+            }).filter(Boolean)}
           </div>
         </div>
 
@@ -743,8 +740,8 @@ function App() {
           <div style={{...styles.explanationItem, borderLeftColor: '#58a6ff', backgroundColor: '#58a6ff11', padding: '16px', borderRadius: '0 8px 8px 0'}}>
             <div style={styles.explanationTerm}>The "Current" Cache Entry</div>
             <div style={styles.explanationDesc}>
-              When you call <code style={styles.highlight}>useGetItemQuery({"{"}id: 2, forceError: false{"}"})</code>, 
-              RTK Query looks up (or creates) a <strong>cache entry</strong> for that exact argument. This is the 
+              When you call <code style={styles.highlight}>useGetItemQuery({"{"}id: 2{"}"})</code>, 
+              RTK Query looks up (or creates) a <strong>cache entry</strong> for that argument. This is the 
               <strong> "current" cache entry</strong> for this hook instance.
               <br/><br/>
               <strong>Almost all values returned by the hook refer to this current cache entry:</strong>
@@ -830,16 +827,17 @@ function App() {
           </div>
 
           <div style={styles.explanationItem}>
-            <div style={styles.explanationTerm}>Cache keys include the full argument</div>
+            <div style={styles.explanationTerm}>Cache keys & serializeQueryArgs</div>
             <div style={styles.explanationDesc}>
-              In this testbed, the argument is <code style={styles.highlight}>{"{"}id, forceError{"}"}</code>. 
-              That means <code style={styles.highlight}>{"{"}id: 1, forceError: false{"}"}</code> and 
-              <code style={styles.highlight}>{"{"}id: 1, forceError: true{"}"}</code> are 
-              <strong> different cache entries</strong>.
+              By default, RTK Query uses the <strong>entire argument object</strong> as the cache key. 
+              But you can customize this with <code style={styles.highlight}>serializeQueryArgs</code>.
               <br/><br/>
-              Toggling "Force errors" doesn't just change behavior — it switches you to an entirely different 
-              cache entry, with its own <code style={styles.highlight}>isFetching</code>, 
-              <code style={styles.highlight}>isError</code>, <code style={styles.highlight}>currentData</code>, etc.
+              In this testbed, the hook arg is <code style={styles.highlight}>{"{"}id, forceError{"}"}</code>, 
+              but we use <code style={styles.highlight}>serializeQueryArgs</code> to only use 
+              <code style={styles.highlight}>id</code> for the cache key. This means:
+              <br/>• <code style={styles.highlight}>forceError</code> affects the request but not which cache entry is used
+              <br/>• Toggling "Force errors" doesn't switch cache entries — it just changes what the next fetch does
+              <br/>• Items 1, 2, 3 each have one cache entry, regardless of forceError state
             </div>
           </div>
 
