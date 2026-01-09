@@ -1,438 +1,746 @@
-import { useState } from 'react'
-import {
-  useGetScreeningListQuery,
-  useGetScreeningQuery,
-  useUpdateScreeningMutation,
-  useRescreenScreeningMutation,
-} from './screeningsApi'
+import { useState, useRef, useEffect } from 'react'
+import { useGetItemQuery, testbedApi, Item, GetItemArgs } from './testbedApi'
+import { useDispatch, useSelector } from 'react-redux'
+import { FetchBaseQueryError } from '@reduxjs/toolkit/query'
+import { SerializedError } from '@reduxjs/toolkit'
+import { RootState } from './store'
 
-function App() {
-  const [selectedId, setSelectedId] = useState<number | null>(null)
-  const [rescreeningId, setRescreeningId] = useState<number | null>(null)
+// Styles
+const styles = {
+  container: {
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+    maxWidth: '1200px',
+    margin: '0 auto',
+    padding: '32px 24px',
+    backgroundColor: '#0d1117',
+    minHeight: '100vh',
+    color: '#c9d1d9',
+  },
+  header: {
+    marginBottom: '32px',
+  },
+  title: {
+    fontSize: '1.75rem',
+    fontWeight: 700,
+    color: '#f0f6fc',
+    margin: 0,
+  },
+  subtitle: {
+    color: '#8b949e',
+    marginTop: '8px',
+    fontSize: '0.95rem',
+    lineHeight: 1.5,
+  },
+  mainContent: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '24px',
+  },
+  section: {
+    backgroundColor: '#161b22',
+    borderRadius: '8px',
+    border: '1px solid #30363d',
+    padding: '20px',
+  },
+  sectionTitle: {
+    fontSize: '0.85rem',
+    fontWeight: 600,
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+    color: '#8b949e',
+    marginBottom: '16px',
+    paddingBottom: '12px',
+    borderBottom: '1px solid #30363d',
+  },
+  controls: {
+    display: 'flex',
+    gap: '8px',
+    flexWrap: 'wrap' as const,
+    marginBottom: '16px',
+  },
+  button: {
+    padding: '8px 16px',
+    borderRadius: '6px',
+    border: '1px solid #30363d',
+    backgroundColor: '#21262d',
+    color: '#c9d1d9',
+    fontSize: '0.875rem',
+    cursor: 'pointer',
+    transition: 'all 0.15s',
+  },
+  buttonActive: {
+    backgroundColor: '#238636',
+    borderColor: '#238636',
+    color: '#fff',
+  },
+  buttonAction: {
+    backgroundColor: '#1f6feb',
+    borderColor: '#1f6feb',
+    color: '#fff',
+  },
+  buttonDanger: {
+    backgroundColor: '#da3633',
+    borderColor: '#da3633',
+    color: '#fff',
+  },
+  stateGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, 1fr)',
+    gap: '12px',
+  },
+  stateItem: {
+    backgroundColor: '#0d1117',
+    padding: '12px',
+    borderRadius: '6px',
+    border: '1px solid #30363d',
+  },
+  stateLabel: {
+    fontSize: '0.75rem',
+    color: '#8b949e',
+    marginBottom: '4px',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+  },
+  stateValue: {
+    fontSize: '1.25rem',
+    fontWeight: 600,
+  },
+  stateTrue: { color: '#3fb950' },
+  stateFalse: { color: '#f85149' },
+  stateNull: { color: '#8b949e' },
+  stateError: { color: '#f85149', backgroundColor: '#f8514922' },
+  errorToggle: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '12px',
+    backgroundColor: '#f8514911',
+    borderRadius: '6px',
+    border: '1px solid #f8514933',
+    marginBottom: '16px',
+  },
+  checkbox: {
+    width: '18px',
+    height: '18px',
+    cursor: 'pointer',
+  },
+  dataPreview: {
+    backgroundColor: '#0d1117',
+    padding: '12px',
+    borderRadius: '6px',
+    border: '1px solid #30363d',
+    marginTop: '12px',
+    fontSize: '0.8rem',
+    overflow: 'auto',
+    maxHeight: '200px',
+  },
+  dataLabel: {
+    fontSize: '0.75rem',
+    color: '#8b949e',
+    marginBottom: '8px',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+  },
+  timeline: {
+    maxHeight: '400px',
+    overflow: 'auto',
+    fontSize: '0.75rem',
+  },
+  timelineEntry: {
+    padding: '8px 12px',
+    borderBottom: '1px solid #21262d',
+    display: 'flex',
+    gap: '12px',
+  },
+  timelineTime: {
+    color: '#8b949e',
+    minWidth: '80px',
+    flexShrink: 0,
+  },
+  timelineEvent: {
+    color: '#c9d1d9',
+    flex: 1,
+  },
+  cacheSection: {
+    gridColumn: '1 / -1',
+  },
+  cacheEntries: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(3, 1fr)',
+    gap: '12px',
+  },
+  cacheEntry: {
+    backgroundColor: '#0d1117',
+    padding: '12px',
+    borderRadius: '6px',
+    border: '1px solid #30363d',
+    fontSize: '0.8rem',
+  },
+  cacheEntryLabel: {
+    fontSize: '0.75rem',
+    color: '#58a6ff',
+    fontWeight: 600,
+    marginBottom: '8px',
+  },
+  explanation: {
+    gridColumn: '1 / -1',
+    backgroundColor: '#161b22',
+    borderRadius: '8px',
+    border: '1px solid #30363d',
+    padding: '24px',
+    marginTop: '8px',
+  },
+  explanationTitle: {
+    fontSize: '1.1rem',
+    fontWeight: 600,
+    color: '#f0f6fc',
+    marginBottom: '16px',
+  },
+  explanationItem: {
+    marginBottom: '16px',
+    paddingLeft: '16px',
+    borderLeft: '3px solid #30363d',
+  },
+  explanationTerm: {
+    color: '#58a6ff',
+    fontWeight: 600,
+    marginBottom: '4px',
+  },
+  explanationDesc: {
+    color: '#8b949e',
+    lineHeight: 1.6,
+    fontSize: '0.9rem',
+  },
+  highlight: {
+    backgroundColor: '#1f6feb33',
+    padding: '2px 6px',
+    borderRadius: '3px',
+    color: '#58a6ff',
+  },
+} as const
 
-  const { data: screenings, isLoading: isListLoading } = useGetScreeningListQuery()
-  const { data: screening, isFetching: isScreeningFetching, refetch } = useGetScreeningQuery(
-    selectedId!,
-    { skip: !selectedId }
-  )
-
-  // Show loading when switching to a different screening (not on revalidation of the same one)
-  const isLoadingNewScreening = isScreeningFetching && screening?.id !== selectedId
-  const [updateScreening] = useUpdateScreeningMutation()
-  const [rescreenScreening] = useRescreenScreeningMutation()
-
-  const handleRescreen = async (id: number) => {
-    setRescreeningId(id)
-    try {
-      await rescreenScreening(id).unwrap()
-      await refetch().unwrap()
-    } finally {
-      setRescreeningId(null)
-    }
+interface LogEntry {
+  time: string
+  event: string
+  values: {
+    isLoading: boolean
+    isFetching: boolean
+    isError: boolean
+    data: Item | undefined
+    currentData: Item | undefined
+    error: FetchBaseQueryError | SerializedError | undefined
   }
+}
 
-  const isRescreening = rescreeningId === selectedId
-
-  const getRiskColor = (score: number) => {
-    if (score >= 7) return '#ef4444'
-    if (score >= 4) return '#f59e0b'
-    return '#22c55e'
+function formatValue(value: unknown): string {
+  if (value === undefined) return 'undefined'
+  if (value === null) return 'null'
+  if (typeof value === 'object') {
+    return JSON.stringify(value, null, 2)
   }
+  return String(value)
+}
 
-  const truncateAddress = (address: string) => {
-    return `${address.slice(0, 6)}...${address.slice(-4)}`
-  }
-
-  if (isListLoading) return <div style={styles.loading}>Loading screenings...</div>
-
+function StateValue({ value, label }: { value: boolean | undefined | null; label: string }) {
+  const isTrue = value === true
+  const isFalse = value === false
+  
   return (
-    <div style={styles.container}>
-      <h1 style={styles.title}>Screening Manager</h1>
-      <p style={styles.subtitle}>
-        Demonstrating <code style={styles.code}>invalidatesTags</code> with per-item cache tags
-      </p>
-
-      <div style={styles.content}>
-        <div style={styles.list}>
-          <h2 style={styles.sectionTitle}>Screenings</h2>
-          {screenings?.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => setSelectedId(s.id)}
-              style={{
-                ...styles.listButton,
-                backgroundColor: selectedId === s.id ? '#3b82f6' : '#2a2a2a',
-                borderColor: selectedId === s.id ? '#3b82f6' : '#3a3a3a',
-              }}
-            >
-              <span style={styles.address}>{truncateAddress(s.title)}</span>
-            </button>
-          ))}
-        </div>
-
-        <div style={styles.details}>
-          {(isLoadingNewScreening || isRescreening) && <div style={styles.loadingSmall}>Loading...</div>}
-          
-          {screening && !isLoadingNewScreening && !isRescreening && (
-            <div style={styles.card}>
-              
-              <h2 style={styles.screeningTitle}>
-                <span style={styles.addressFull}>{screening.title}</span>
-              </h2>
-
-              <div style={styles.riskContainer}>
-                <span style={styles.riskLabel}>Risk Score</span>
-                <span style={{
-                  ...styles.riskScore,
-                  backgroundColor: getRiskColor(screening.riskScore),
-                }}>
-                  {screening.riskScore.toFixed(1)}
-                </span>
-                <button
-                  onClick={() => handleRescreen(screening.id)}
-                  disabled={isRescreening}
-                  style={{
-                    ...styles.rescreenButton,
-                    opacity: isRescreening ? 0.6 : 1,
-                    cursor: isRescreening ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  {isRescreening ? 'Rescreening...' : 'Rescreen'}
-                </button>
-              </div>
-              
-              <div style={styles.field}>
-                <label style={styles.fieldLabel}>Status</label>
-                <div style={styles.buttonGroup}>
-                  <button
-                    onClick={() => updateScreening({ id: screening.id, status: 'open' })}
-                    style={{
-                      ...styles.toggleButton,
-                      backgroundColor: screening.status === 'open' ? '#22c55e' : '#2a2a2a',
-                      borderColor: screening.status === 'open' ? '#22c55e' : '#3a3a3a',
-                    }}
-                  >
-                    Open
-                  </button>
-                  <button
-                    onClick={() => updateScreening({ id: screening.id, status: 'closed' })}
-                    style={{
-                      ...styles.toggleButton,
-                      backgroundColor: screening.status === 'closed' ? '#ef4444' : '#2a2a2a',
-                      borderColor: screening.status === 'closed' ? '#ef4444' : '#3a3a3a',
-                    }}
-                  >
-                    Closed
-                  </button>
-                </div>
-              </div>
-
-              <div style={styles.field}>
-                <label style={styles.fieldLabel}>Assignee</label>
-                <div style={styles.buttonGroup}>
-                  <button
-                    onClick={() => updateScreening({ id: screening.id, assignee: 'adam' })}
-                    style={{
-                      ...styles.toggleButton,
-                      backgroundColor: screening.assignee === 'adam' ? '#8b5cf6' : '#2a2a2a',
-                      borderColor: screening.assignee === 'adam' ? '#8b5cf6' : '#3a3a3a',
-                    }}
-                  >
-                    Adam
-                  </button>
-                  <button
-                    onClick={() => updateScreening({ id: screening.id, assignee: 'joe' })}
-                    style={{
-                      ...styles.toggleButton,
-                      backgroundColor: screening.assignee === 'joe' ? '#f59e0b' : '#2a2a2a',
-                      borderColor: screening.assignee === 'joe' ? '#f59e0b' : '#3a3a3a',
-                    }}
-                  >
-                    Joe
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {!selectedId && (
-            <div style={styles.placeholder}>
-              <p>← Select a screening to view details</p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div style={styles.explanation}>
-        <h2 style={styles.explanationTitle}>How Loading States Work</h2>
-        
-        <div style={styles.explanationSection}>
-          <h3 style={styles.explanationHeading}>1. Selecting a Screening</h3>
-          <p style={styles.explanationText}>
-            When you click a screening from the list, <code style={styles.code}>isLoadingNewScreening</code> is calculated as{' '}
-            <code style={styles.code}>isFetching && screening?.id !== selectedId</code>. This shows the loading state only when 
-            switching to a <em>different</em> screening, not during background revalidations of the current one.
-          </p>
-        </div>
-
-        <div style={styles.explanationSection}>
-          <h3 style={styles.explanationHeading}>2. Status & Assignee Updates (Optimistic)</h3>
-          <p style={styles.explanationText}>
-            The Status and Assignee buttons use <code style={styles.code}>optimistic updates</code> via{' '}
-            <code style={styles.code}>onQueryStarted</code>. The UI updates instantly by patching the cache with{' '}
-            <code style={styles.code}>updateQueryData</code>, then reverts if the server request fails. No loading state 
-            is shown because the update appears immediate.
-          </p>
-        </div>
-
-        <div style={styles.explanationSection}>
-          <h3 style={styles.explanationHeading}>3. Rescreen Button (Mutation + Refetch)</h3>
-          <p style={styles.explanationText}>
-            The Rescreen button needs to show a loading state through <em>both</em> the mutation and the subsequent data refetch. 
-            This is tricky because RTK Query's <code style={styles.code}>invalidatesTags</code> triggers a refetch that runs 
-            independently of the mutation's promise.
-          </p>
-          <p style={styles.explanationText}>
-            <strong>Solution:</strong> We use local state (<code style={styles.code}>rescreeningId</code>) set before the mutation 
-            and cleared only after both operations complete:
-          </p>
-          <pre style={styles.codeBlock}>{`const handleRescreen = async (id: number) => {
-  setRescreeningId(id)        // Start loading
-  try {
-    await rescreenScreening(id).unwrap()  // Wait for mutation
-    await refetch().unwrap()              // Wait for refetch
-  } finally {
-    setRescreeningId(null)    // End loading
-  }
-}`}</pre>
-          <p style={styles.explanationText}>
-            By manually calling <code style={styles.code}>refetch().unwrap()</code> and awaiting it, we ensure the loading 
-            state persists until the fresh data is actually loaded. The <code style={styles.code}>finally</code> block 
-            guarantees cleanup even if an error occurs.
-          </p>
-        </div>
+    <div style={styles.stateItem}>
+      <div style={styles.stateLabel}>{label}</div>
+      <div
+        style={{
+          ...styles.stateValue,
+          ...(isTrue ? styles.stateTrue : isFalse ? styles.stateFalse : styles.stateNull),
+        }}
+      >
+        {String(value)}
       </div>
     </div>
   )
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    maxWidth: '900px',
-    margin: '0 auto',
-    padding: '40px 20px',
-    backgroundColor: '#121212',
-    minHeight: '100vh',
-    color: '#e5e5e5',
-  },
-  title: {
-    textAlign: 'center',
-    marginBottom: '8px',
-    fontSize: '2rem',
-    fontWeight: 600,
-    color: '#fff',
-  },
-  subtitle: {
-    textAlign: 'center',
-    color: '#888',
-    marginBottom: '40px',
-    fontSize: '0.95rem',
-  },
-  code: {
-    backgroundColor: '#2a2a2a',
-    padding: '2px 8px',
-    borderRadius: '4px',
-    fontSize: '0.875rem',
-    color: '#a78bfa',
-  },
-  content: {
-    display: 'flex',
-    gap: '40px',
-  },
-  list: {
-    flex: 1,
-  },
-  sectionTitle: {
-    fontSize: '0.875rem',
-    fontWeight: 600,
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    color: '#888',
-    marginBottom: '16px',
-  },
-  listButton: {
-    display: 'block',
-    width: '100%',
-    padding: '14px 18px',
-    marginBottom: '8px',
-    border: '1px solid',
-    borderRadius: '8px',
-    cursor: 'pointer',
-    fontSize: '0.95rem',
-    textAlign: 'left',
-    color: '#e5e5e5',
-    transition: 'all 0.15s ease',
-  },
-  address: {
-    fontFamily: 'monospace',
-    fontSize: '0.9rem',
-  },
-  addressFull: {
-    fontFamily: 'monospace',
-    fontSize: '0.95rem',
-    wordBreak: 'break-all' as const,
-  },
-  details: {
-    flex: 1.2,
-  },
-  card: {
-    position: 'relative',
-    padding: '28px',
-    backgroundColor: '#1e1e1e',
-    borderRadius: '12px',
-    border: '1px solid #2a2a2a',
-  },
-  overlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(18, 18, 18, 0.85)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: '12px',
-    fontSize: '1rem',
-    color: '#3b82f6',
-    fontWeight: 500,
-  },
-  screeningTitle: {
-    margin: '0 0 20px 0',
-    fontSize: '1.5rem',
-    fontWeight: 600,
-    color: '#fff',
-  },
-  riskContainer: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    marginBottom: '24px',
-    padding: '16px',
-    backgroundColor: '#252525',
-    borderRadius: '8px',
-  },
-  riskLabel: {
-    fontSize: '0.875rem',
-    color: '#888',
-    fontWeight: 500,
-  },
-  riskScore: {
-    padding: '6px 14px',
-    borderRadius: '6px',
-    fontSize: '1.1rem',
-    fontWeight: 600,
-    color: '#fff',
-  },
-  rescreenButton: {
-    marginLeft: 'auto',
-    padding: '8px 16px',
-    backgroundColor: '#3b82f6',
-    border: 'none',
-    borderRadius: '6px',
-    fontSize: '0.875rem',
-    fontWeight: 500,
-    color: '#fff',
-    transition: 'all 0.15s ease',
-  },
-  field: {
-    marginBottom: '20px',
-  },
-  fieldLabel: {
-    display: 'block',
-    fontWeight: 500,
-    marginBottom: '10px',
-    color: '#888',
-    fontSize: '0.875rem',
-  },
-  buttonGroup: {
-    display: 'flex',
-    gap: '8px',
-  },
-  toggleButton: {
-    padding: '10px 24px',
-    border: '1px solid',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    fontSize: '0.9rem',
-    fontWeight: 500,
-    color: '#e5e5e5',
-    transition: 'all 0.15s ease',
-  },
-  loading: {
-    textAlign: 'center',
-    padding: '80px 40px',
-    fontSize: '1.1rem',
-    color: '#888',
-    backgroundColor: '#121212',
-    minHeight: '100vh',
-  },
-  loadingSmall: {
-    textAlign: 'center',
-    padding: '40px',
-    fontSize: '1rem',
-    color: '#888',
-  },
-  placeholder: {
-    padding: '40px',
-    textAlign: 'center',
-    color: '#666',
-    backgroundColor: '#1e1e1e',
-    borderRadius: '12px',
-    border: '1px dashed #3a3a3a',
-  },
-  explanation: {
-    marginTop: '60px',
-    padding: '32px',
-    backgroundColor: '#1a1a1a',
-    borderRadius: '12px',
-    border: '1px solid #2a2a2a',
-  },
-  explanationTitle: {
-    fontSize: '1.5rem',
-    fontWeight: 600,
-    color: '#fff',
-    marginBottom: '24px',
-    paddingBottom: '16px',
-    borderBottom: '1px solid #2a2a2a',
-  },
-  explanationSection: {
-    marginBottom: '24px',
-  },
-  explanationHeading: {
-    fontSize: '1.1rem',
-    fontWeight: 600,
-    color: '#3b82f6',
-    marginBottom: '12px',
-  },
-  explanationText: {
-    fontSize: '0.95rem',
-    lineHeight: 1.7,
-    color: '#b0b0b0',
-    marginBottom: '12px',
-  },
-  codeBlock: {
-    backgroundColor: '#252525',
-    padding: '16px',
-    borderRadius: '8px',
-    fontSize: '0.85rem',
-    fontFamily: 'monospace',
-    color: '#e5e5e5',
-    overflowX: 'auto',
-    marginBottom: '12px',
-    whiteSpace: 'pre',
-  },
+function DataPreview({ 
+  data, 
+  label, 
+  staleWarning,
+  isError,
+}: { 
+  data: unknown
+  label: string
+  staleWarning?: boolean
+  isError?: boolean
+}) {
+  const borderColor = isError ? '#f85149' : staleWarning ? '#d29922' : '#30363d'
+  const bgColor = isError ? '#f8514911' : staleWarning ? '#d299220d' : undefined
+  const labelColor = isError ? '#f85149' : staleWarning ? '#d29922' : '#8b949e'
+  
+  return (
+    <div style={{
+      ...styles.dataPreview,
+      borderColor,
+      ...(bgColor ? { backgroundColor: bgColor } : {}),
+    }}>
+      <div style={{ ...styles.dataLabel, color: labelColor }}>
+        {label} {staleWarning && <span style={{ fontSize: '0.7rem' }}>(⚠️ stale! from different arg)</span>}
+      </div>
+      <pre style={{ margin: 0, whiteSpace: 'pre-wrap', color: data ? '#c9d1d9' : '#8b949e' }}>
+        {formatValue(data)}
+      </pre>
+    </div>
+  )
+}
+
+function App() {
+  const dispatch = useDispatch()
+  const [selectedId, setSelectedId] = useState<number>(1)
+  const [forceError, setForceError] = useState<boolean>(false)
+  const [log, setLog] = useState<LogEntry[]>([])
+  const prevStateRef = useRef<string>('')
+  const logContainerRef = useRef<HTMLDivElement>(null)
+
+  // This is THE hook we're testing
+  const queryArgs: GetItemArgs = { id: selectedId, forceError }
+  const queryResult = useGetItemQuery(queryArgs)
+  
+  const { isLoading, isFetching, isError, error, data, currentData, refetch } = queryResult
+
+  // Get the raw cache state for inspection
+  const cacheState = useSelector((state: RootState) => state.testbedApi.queries)
+
+  // Log state changes
+  useEffect(() => {
+    const currentState = JSON.stringify({ 
+      isLoading, isFetching, isError, 
+      hasData: !!data, hasCurrentData: !!currentData,
+      dataId: data?.id, currentDataId: currentData?.id
+    })
+    
+    if (currentState !== prevStateRef.current) {
+      prevStateRef.current = currentState
+      
+      const now = new Date()
+      const time = now.toLocaleTimeString('en-US', { 
+        hour12: false, 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit',
+        fractionalSecondDigits: 3 
+      } as Intl.DateTimeFormatOptions)
+      
+      let event = ''
+      if (isError) {
+        event = `❌ ERROR for id=${selectedId}${forceError ? ' (forced)' : ''}`
+      } else if (isLoading && isFetching) {
+        event = `🔄 INITIAL LOAD for id=${selectedId} (no cached data yet)`
+      } else if (isFetching && !isLoading) {
+        event = `⟳ REFETCHING id=${selectedId} (has cached data, updating in background)`
+      } else if (!isFetching && data) {
+        event = `✓ RECEIVED data for id=${selectedId} (fetchCount: ${data.fetchCount})`
+      } else if (!isFetching && !data) {
+        event = `○ IDLE for id=${selectedId}`
+      }
+      
+      setLog(prev => [...prev, {
+        time,
+        event,
+        values: { isLoading, isFetching, isError, error, data, currentData }
+      }])
+    }
+  }, [isLoading, isFetching, isError, error, data, currentData, selectedId, forceError])
+
+  // Auto-scroll log
+  useEffect(() => {
+    if (logContainerRef.current) {
+      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight
+    }
+  }, [log])
+
+  const handleSelectId = (id: number) => {
+    if (id !== selectedId) {
+      setLog(prev => [...prev, {
+        time: new Date().toLocaleTimeString('en-US', { 
+          hour12: false, 
+          hour: '2-digit', 
+          minute: '2-digit', 
+          second: '2-digit',
+          fractionalSecondDigits: 3 
+        } as Intl.DateTimeFormatOptions),
+        event: `📍 SWITCHING from id=${selectedId} to id=${id}`,
+        values: { isLoading, isFetching, isError, error, data, currentData }
+      }])
+      setSelectedId(id)
+    }
+  }
+
+  const handleToggleError = () => {
+    const newValue = !forceError
+    setLog(prev => [...prev, {
+      time: new Date().toLocaleTimeString('en-US', { 
+        hour12: false, 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit',
+        fractionalSecondDigits: 3 
+      } as Intl.DateTimeFormatOptions),
+      event: `⚡ ERROR MODE ${newValue ? 'ENABLED' : 'DISABLED'}`,
+      values: { isLoading, isFetching, isError, error, data, currentData }
+    }])
+    setForceError(newValue)
+  }
+
+  const handleRefetch = () => {
+    setLog(prev => [...prev, {
+      time: new Date().toLocaleTimeString('en-US', { 
+        hour12: false, 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit',
+        fractionalSecondDigits: 3 
+      } as Intl.DateTimeFormatOptions),
+      event: `🔃 MANUAL REFETCH triggered for id=${selectedId}${forceError ? ' (error mode ON)' : ''}`,
+      values: { isLoading, isFetching, isError, error, data, currentData }
+    }])
+    refetch()
+  }
+
+  const handleInvalidate = () => {
+    setLog(prev => [...prev, {
+      time: new Date().toLocaleTimeString('en-US', { 
+        hour12: false, 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit',
+        fractionalSecondDigits: 3 
+      } as Intl.DateTimeFormatOptions),
+      event: `🗑️ INVALIDATING cache for id=${selectedId}`,
+      values: { isLoading, isFetching, isError, error, data, currentData }
+    }])
+    dispatch(testbedApi.util.invalidateTags([{ type: 'Item', id: selectedId }]))
+  }
+
+  const handleInvalidateAll = () => {
+    setLog(prev => [...prev, {
+      time: new Date().toLocaleTimeString('en-US', { 
+        hour12: false, 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit',
+        fractionalSecondDigits: 3 
+      } as Intl.DateTimeFormatOptions),
+      event: `💥 INVALIDATING ALL Item cache entries`,
+      values: { isLoading, isFetching, isError, error, data, currentData }
+    }])
+    dispatch(testbedApi.util.invalidateTags(['Item']))
+  }
+
+  const handleClearLog = () => {
+    setLog([])
+  }
+
+  return (
+    <div style={styles.container}>
+      <header style={styles.header}>
+        <h1 style={styles.title}>RTK Query useQuery Testbed</h1>
+        <p style={styles.subtitle}>
+          Explore how <code style={styles.highlight}>isLoading</code>, <code style={styles.highlight}>isFetching</code>, 
+          <code style={styles.highlight}>data</code>, and <code style={styles.highlight}>currentData</code> behave 
+          when switching between cache entries, refetching, and invalidating.
+        </p>
+      </header>
+
+      <div style={styles.mainContent}>
+        {/* Controls Section */}
+        <div style={styles.section}>
+          <h2 style={styles.sectionTitle}>Controls</h2>
+          
+          <div style={styles.dataLabel}>Select Item ID (each creates a separate cache entry)</div>
+          <div style={styles.controls}>
+            {[1, 2, 3].map(id => (
+              <button
+                key={id}
+                style={{
+                  ...styles.button,
+                  ...(selectedId === id ? styles.buttonActive : {}),
+                }}
+                onClick={() => handleSelectId(id)}
+              >
+                Item {id}
+              </button>
+            ))}
+          </div>
+
+          <div style={styles.errorToggle}>
+            <input 
+              type="checkbox" 
+              id="forceError" 
+              checked={forceError} 
+              onChange={handleToggleError}
+              style={styles.checkbox}
+            />
+            <label htmlFor="forceError" style={{ cursor: 'pointer', color: forceError ? '#f85149' : '#8b949e' }}>
+              Force errors on next fetch
+            </label>
+          </div>
+
+          <div style={styles.dataLabel}>Actions for current selection (id={selectedId})</div>
+          <div style={styles.controls}>
+            <button 
+              style={{ ...styles.button, ...styles.buttonAction }} 
+              onClick={handleRefetch}
+              disabled={isFetching}
+            >
+              Refetch
+            </button>
+            <button 
+              style={{ ...styles.button, ...styles.buttonDanger }} 
+              onClick={handleInvalidate}
+            >
+              Invalidate This
+            </button>
+            <button 
+              style={{ ...styles.button, ...styles.buttonDanger }} 
+              onClick={handleInvalidateAll}
+            >
+              Invalidate All
+            </button>
+          </div>
+        </div>
+
+        {/* Current State Section */}
+        <div style={styles.section}>
+          <h2 style={styles.sectionTitle}>Current Hook Return Values (id={selectedId})</h2>
+          
+          <div style={styles.stateGrid}>
+            <StateValue label="isLoading" value={isLoading} />
+            <StateValue label="isFetching" value={isFetching} />
+            <StateValue label="isError" value={isError} />
+            <div style={styles.stateItem}>
+              <div style={styles.stateLabel}>isSuccess</div>
+              <div style={{
+                ...styles.stateValue,
+                ...(!isLoading && !isFetching && !isError && data ? styles.stateTrue : styles.stateFalse),
+              }}>
+                {String(!isLoading && !isFetching && !isError && !!data)}
+              </div>
+            </div>
+          </div>
+
+          <DataPreview 
+            data={data} 
+            label={`data ${data && data.id !== selectedId ? `(id=${data.id}, but selected=${selectedId})` : ''}`}
+            staleWarning={data !== undefined && data.id !== selectedId}
+          />
+          <DataPreview 
+            data={currentData} 
+            label="currentData"
+          />
+          {isError && (
+            <DataPreview 
+              data={error} 
+              label="error"
+              isError={true}
+            />
+          )}
+        </div>
+
+        {/* Cache Inspection Section */}
+        <div style={{ ...styles.section, ...styles.cacheSection }}>
+          <h2 style={styles.sectionTitle}>Cache State (all entries for getItem)</h2>
+          <div style={{ fontSize: '0.75rem', color: '#8b949e', marginBottom: '12px' }}>
+            Note: Each unique arg combo (id + forceError) creates a separate cache entry
+          </div>
+          
+          <div style={styles.cacheEntries}>
+            {[1, 2, 3].flatMap(id => 
+              [false, true].map(fe => {
+                const cacheKey = `getItem({"forceError":${fe},"id":${id}})`
+                const altCacheKey = `getItem({"id":${id},"forceError":${fe}})`
+                const entry = cacheState[cacheKey] || cacheState[altCacheKey]
+                const isCurrentlySelected = id === selectedId && fe === forceError
+                
+                // Skip entries that don't exist and aren't currently selected
+                if (!entry && !isCurrentlySelected) return null
+                
+                return (
+                  <div 
+                    key={`${id}-${fe}`} 
+                    style={{
+                      ...styles.cacheEntry,
+                      borderColor: isCurrentlySelected ? '#58a6ff' : entry?.status === 'rejected' ? '#f85149' : '#30363d',
+                      borderWidth: isCurrentlySelected ? 2 : 1,
+                    }}
+                  >
+                    <div style={styles.cacheEntryLabel}>
+                      id={id}, forceError={String(fe)}{isCurrentlySelected && ' ← current'}
+                    </div>
+                    {entry ? (
+                      <>
+                        <div style={{ color: '#8b949e', marginBottom: '4px' }}>
+                          status: <span style={{ 
+                            color: entry.status === 'fulfilled' ? '#3fb950' : 
+                                   entry.status === 'pending' ? '#d29922' : 
+                                   entry.status === 'rejected' ? '#f85149' : '#c9d1d9' 
+                          }}>
+                            {entry.status}
+                          </span>
+                        </div>
+                        {entry.data && (
+                          <div style={{ color: '#8b949e' }}>
+                            fetchCount: <span style={{ color: '#c9d1d9' }}>{(entry.data as Item).fetchCount}</span>
+                          </div>
+                        )}
+                        {entry.error && (
+                          <div style={{ color: '#f85149', fontSize: '0.75rem' }}>
+                            has error
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div style={{ color: '#8b949e', fontStyle: 'italic' }}>
+                        (will fetch when selected)
+                      </div>
+                    )}
+                  </div>
+                )
+              })
+            ).filter(Boolean)}
+          </div>
+        </div>
+
+        {/* Timeline Section */}
+        <div style={{ ...styles.section, ...styles.cacheSection }}>
+          <h2 style={styles.sectionTitle}>
+            State Change Timeline
+            <button 
+              style={{ ...styles.button, marginLeft: '12px', padding: '4px 8px', fontSize: '0.7rem' }}
+              onClick={handleClearLog}
+            >
+              Clear
+            </button>
+          </h2>
+          
+          <div style={styles.timeline} ref={logContainerRef}>
+            {log.length === 0 ? (
+              <div style={{ color: '#8b949e', padding: '12px', fontStyle: 'italic' }}>
+                Interact with the controls above to see state changes...
+              </div>
+            ) : (
+              log.map((entry, i) => (
+                <div key={i} style={styles.timelineEntry}>
+                  <span style={styles.timelineTime}>{entry.time}</span>
+                  <span style={styles.timelineEvent}>{entry.event}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Explanation Section */}
+        <div style={styles.explanation}>
+          <h2 style={styles.explanationTitle}>How It All Works</h2>
+          
+          <div style={styles.explanationItem}>
+            <div style={styles.explanationTerm}>data vs currentData</div>
+            <div style={styles.explanationDesc}>
+              <code style={styles.highlight}>data</code> is <strong>"sticky"</strong> — it holds the last successful result 
+              <strong> regardless of which argument it came from</strong>. When you switch from Item 1 to Item 2, 
+              <code style={styles.highlight}>data</code> keeps showing Item 1's data until Item 2's request completes.
+              <br/><br/>
+              <code style={styles.highlight}>currentData</code> is <strong>"strict"</strong> — it only contains data 
+              if it's for the <strong>current argument</strong>. When you switch args, it immediately becomes 
+              <code style={styles.highlight}>undefined</code> until the new data arrives.
+              <br/><br/>
+              <strong>Use case:</strong> Use <code style={styles.highlight}>data</code> when you want to keep showing 
+              stale content while loading. Use <code style={styles.highlight}>currentData</code> when you want to show 
+              a loading state immediately upon arg change.
+            </div>
+          </div>
+
+          <div style={styles.explanationItem}>
+            <div style={styles.explanationTerm}>isLoading</div>
+            <div style={styles.explanationDesc}>
+              <code style={styles.highlight}>isLoading</code> is <strong>true when fetching AND 
+              <code style={styles.highlight}>data</code> is undefined</strong>. Since <code style={styles.highlight}>data</code> is 
+              sticky (persists across arg changes), <code style={styles.highlight}>isLoading</code> is only true on 
+              the <strong>very first fetch</strong> before any data has ever been loaded.
+              <br/><br/>
+              Once you've loaded <em>any</em> item successfully, <code style={styles.highlight}>isLoading</code> will 
+              be <code style={styles.highlight}>false</code> even when switching to uncached items — because 
+              <code style={styles.highlight}>data</code> still holds the previous item's data.
+              <br/><br/>
+              <strong>In practice:</strong> <code style={styles.highlight}>isLoading</code> is for showing an initial 
+              loading skeleton on first page load, not for showing loading states when switching between items.
+            </div>
+          </div>
+
+          <div style={styles.explanationItem}>
+            <div style={styles.explanationTerm}>isFetching</div>
+            <div style={styles.explanationDesc}>
+              <code style={styles.highlight}>isFetching</code> is <strong>true whenever a request is in flight</strong> — 
+              whether it's an initial load, a refetch, or a fetch after switching args.
+              <br/><br/>
+              Unlike <code style={styles.highlight}>isLoading</code>, it doesn't care whether 
+              <code style={styles.highlight}>data</code> exists. It purely tracks network activity for the current subscription.
+              <br/><br/>
+              <strong>In practice:</strong> Use <code style={styles.highlight}>isFetching</code> to show a subtle 
+              loading indicator (like a spinner in the corner) while keeping existing content visible.
+            </div>
+          </div>
+
+          <div style={styles.explanationItem}>
+            <div style={styles.explanationTerm}>Errors and data</div>
+            <div style={styles.explanationDesc}>
+              When an error occurs, <code style={styles.highlight}>data</code> is <strong>preserved</strong> — it still 
+              contains the last successful result (if any). This lets you show stale data alongside an error message.
+              <br/><br/>
+              <code style={styles.highlight}>currentData</code> behaves the same way — it keeps the last successful 
+              data for the current arg, even after an error.
+              <br/><br/>
+              <code style={styles.highlight}>isLoading</code> and <code style={styles.highlight}>isFetching</code> 
+              are both <code style={styles.highlight}>false</code> when in an error state (the request has completed, 
+              just unsuccessfully).
+              <br/><br/>
+              <strong>In practice:</strong> You can show both the error AND the stale data, letting users see what 
+              they had before while knowing something went wrong.
+            </div>
+          </div>
+
+          <div style={styles.explanationItem}>
+            <div style={styles.explanationTerm}>Retrying after an error</div>
+            <div style={styles.explanationDesc}>
+              If you retry a failed request (via refetch or invalidation), <code style={styles.highlight}>isLoading</code> 
+              will be <code style={styles.highlight}>false</code> during the retry — because 
+              <code style={styles.highlight}>data</code> still exists from before the error (or from a different arg).
+              <br/><br/>
+              <code style={styles.highlight}>isFetching</code> will be <code style={styles.highlight}>true</code> 
+              during the retry, as expected.
+              <br/><br/>
+              If the cache entry had <em>never</em> succeeded (error on first load), then 
+              <code style={styles.highlight}>isLoading</code> would be <code style={styles.highlight}>true</code> 
+              on retry — but only if no other arg's data is in <code style={styles.highlight}>data</code>.
+            </div>
+          </div>
+
+          <div style={styles.explanationItem}>
+            <div style={styles.explanationTerm}>Cache entries</div>
+            <div style={styles.explanationDesc}>
+              Each unique argument creates a <strong>separate cache entry</strong>. In this testbed, the full arg 
+              is <code style={styles.highlight}>{"{"}id, forceError{"}"}</code>, so toggling "Force errors" 
+              switches to a different cache entry entirely.
+              <br/><br/>
+              <code style={styles.highlight}>isLoading</code> and <code style={styles.highlight}>isFetching</code> 
+              are about the <strong>current subscription</strong> (the cache entry for the current arg), 
+              not about "any cache entry loading anywhere."
+              <br/><br/>
+              <strong>Key insight:</strong> The hook returns values for the arg you pass in. Other cache entries 
+              might be loading in the background (from other components), but this hook only reports on its own subscription.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default App
