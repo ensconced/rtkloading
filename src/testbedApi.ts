@@ -13,10 +13,23 @@ export interface GetItemArgs {
   forceError?: boolean
 }
 
+// Default: keep unused data for 60 seconds
+// We'll make this configurable via the UI
+let keepUnusedDataForSeconds = 10
+
+export const setKeepUnusedDataFor = (seconds: number) => {
+  keepUnusedDataForSeconds = seconds
+}
+
+export const getKeepUnusedDataFor = () => keepUnusedDataForSeconds
+
 export const testbedApi = createApi({
   reducerPath: 'testbedApi',
   // Use relative URL so service worker can intercept
   baseQuery: fetchBaseQuery({ baseUrl: '/api/' }),
+  // Note: keepUnusedDataFor is set at API creation time, so changing it requires
+  // a page refresh. We set a short default (10s) for demo purposes.
+  keepUnusedDataFor: 10,
   tagTypes: ['Item'],
   endpoints: (builder) => ({
     // GET single item by id

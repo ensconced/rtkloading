@@ -297,20 +297,30 @@ function App() {
   const [forceError, setForceError] = useState<boolean>(false)
   const [pollingEnabled, setPollingEnabled] = useState<boolean>(false)
   const [pollingInterval, setPollingInterval] = useState<number>(3000)
+  const [skipQuery, setSkipQuery] = useState<boolean>(false)
   const [log, setLog] = useState<LogEntry[]>([])
   const prevStateRef = useRef<string>('')
   const logContainerRef = useRef<HTMLDivElement>(null)
+  
+  // Force re-render every second to update cache expiry countdowns
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    const interval = setInterval(() => setTick(t => t + 1), 1000)
+    return () => clearInterval(interval)
+  }, [])
 
   // This is THE hook we're testing
   const queryArgs: GetItemArgs = { id: selectedId, forceError }
   const queryResult = useGetItemQuery(queryArgs, {
     pollingInterval: pollingEnabled ? pollingInterval : 0,
+    skip: skipQuery,
   })
   
   const { isLoading, isFetching, isError, error, data, currentData, refetch } = queryResult
 
   // Get the raw cache state for inspection
   const cacheState = useSelector((state: RootState) => state.testbedApi.queries)
+  const subscriptions = useSelector((state: RootState) => state.testbedApi.subscriptions)
 
   // Log state changes
   useEffect(() => {
@@ -558,6 +568,54 @@ function App() {
             )}
           </div>
 
+          <div style={{
+            ...styles.errorToggle,
+            borderColor: skipQuery ? '#d29922' : '#30363d',
+            backgroundColor: skipQuery ? '#d2992211' : 'transparent',
+          }}>
+            <input 
+              type="checkbox" 
+              id="skip" 
+              checked={skipQuery} 
+              onChange={() => {
+                const newValue = !skipQuery
+                setLog(prev => [...prev, {
+                  time: new Date().toLocaleTimeString('en-US', { 
+                    hour12: false, 
+                    hour: '2-digit', 
+                    minute: '2-digit', 
+                    second: '2-digit',
+                    fractionalSecondDigits: 3 
+                  } as Intl.DateTimeFormatOptions),
+                  event: newValue 
+                    ? `⏸️ SKIPPED query (unsubscribed from cache entry)` 
+                    : `▶️ UNSKIPPED query (re-subscribed to cache entry)`,
+                  values: { isLoading, isFetching, isError, error, data, currentData }
+                }])
+                setSkipQuery(newValue)
+              }}
+              style={styles.checkbox}
+            />
+            <label htmlFor="skip" style={{ cursor: 'pointer', color: skipQuery ? '#d29922' : '#8b949e' }}>
+              Skip query (unsubscribe from cache)
+            </label>
+          </div>
+          
+          {skipQuery && (
+            <div style={{ 
+              fontSize: '0.75rem', 
+              color: '#d29922', 
+              padding: '8px 12px',
+              backgroundColor: '#d2992209',
+              borderRadius: '6px',
+              marginBottom: '12px',
+            }}>
+              ⚠️ Query skipped — not subscribed to cache entry. 
+              Unused cache entries are removed after <strong>10 seconds</strong>.
+              Watch the Cache State panel to see entries disappear!
+            </div>
+          )}
+
           <div style={styles.dataLabel}>Actions for current selection (id={selectedId})</div>
           <div style={styles.controls}>
             <button 
@@ -623,7 +681,7 @@ function App() {
         <div style={{ ...styles.section, ...styles.cacheSection }}>
           <h2 style={styles.sectionTitle}>Cache State (all entries for getItem)</h2>
           <div style={{ fontSize: '0.75rem', color: '#8b949e', marginBottom: '12px' }}>
-            Note: Each unique arg combo (id + forceError) creates a separate cache entry
+            Each unique arg combo creates a separate cache entry. Unused entries expire after 10s.
           </div>
           
           <div style={styles.cacheEntries}>
@@ -632,7 +690,10 @@ function App() {
                 const cacheKey = `getItem({"forceError":${fe},"id":${id}})`
                 const altCacheKey = `getItem({"id":${id},"forceError":${fe}})`
                 const entry = cacheState[cacheKey] || cacheState[altCacheKey]
+                const entrySubs = subscriptions[cacheKey] || subscriptions[altCacheKey] || {}
+                const subCount = Object.keys(entrySubs).length
                 const isCurrentlySelected = id === selectedId && fe === forceError
+                const isSubscribed = isCurrentlySelected && !skipQuery
                 
                 // Skip entries that don't exist and aren't currently selected
                 if (!entry && !isCurrentlySelected) return null
@@ -644,6 +705,7 @@ function App() {
                       ...styles.cacheEntry,
                       borderColor: isCurrentlySelected ? '#58a6ff' : entry?.status === 'rejected' ? '#f85149' : '#30363d',
                       borderWidth: isCurrentlySelected ? 2 : 1,
+                      opacity: entry ? 1 : 0.5,
                     }}
                   >
                     <div style={styles.cacheEntryLabel}>
@@ -660,6 +722,19 @@ function App() {
                             {entry.status}
                           </span>
                         </div>
+                        <div style={{ color: '#8b949e', marginBottom: '4px' }}>
+                          subscribers: <span style={{ 
+                            color: subCount > 0 ? '#3fb950' : '#d29922',
+                            fontWeight: subCount > 0 ? 600 : 400,
+                          }}>
+                            {subCount}
+                          </span>
+                          {subCount === 0 && (
+                            <span style={{ color: '#d29922', fontSize: '0.7rem', marginLeft: '4px' }}>
+                              (will expire)
+                            </span>
+                          )}
+                        </div>
                         {entry.data && (
                           <div style={{ color: '#8b949e' }}>
                             fetchCount: <span style={{ color: '#c9d1d9' }}>{(entry.data as Item).fetchCount}</span>
@@ -673,7 +748,7 @@ function App() {
                       </>
                     ) : (
                       <div style={{ color: '#8b949e', fontStyle: 'italic' }}>
-                        (will fetch when selected)
+                        {isSubscribed ? '(will fetch)' : '(no entry yet)'}
                       </div>
                     )}
                   </div>
@@ -836,6 +911,33 @@ function App() {
               <br/>• Polling continues even if a poll errors — try enabling both polling and "Force errors"
               <br/>• Polling stops when you switch to a different cache entry (different args)
               <br/>• Polling only happens while the component is mounted and the hook is subscribed
+            </div>
+          </div>
+
+          <div style={styles.explanationItem}>
+            <div style={styles.explanationTerm}>Cache Lifetime & Subscriptions</div>
+            <div style={styles.explanationDesc}>
+              Each <code style={styles.highlight}>useQuery</code> hook creates a <strong>subscription</strong> to 
+              its cache entry. Cache entries stay alive as long as they have at least one subscriber.
+              <br/><br/>
+              When all subscribers unmount (or skip), the entry becomes <strong>unused</strong>. After 
+              <code style={styles.highlight}>keepUnusedDataFor</code> seconds (10s in this demo), 
+              the entry is garbage collected and removed from the cache.
+              <br/><br/>
+              <strong>Try this:</strong>
+              <br/>1. Load Item 1, then switch to Item 2
+              <br/>2. Watch the Cache State — Item 1 now has 0 subscribers
+              <br/>3. Wait 10 seconds — Item 1's cache entry disappears!
+              <br/>4. Switch back to Item 1 — it has to fetch again (cache miss)
+              <br/><br/>
+              <strong>Or try with skip:</strong>
+              <br/>1. Load Item 1
+              <br/>2. Enable "Skip query" — subscriber count drops to 0
+              <br/>3. Wait 10 seconds — the entry is removed even though you're "on" that item
+              <br/>4. Disable skip — it fetches fresh
+              <br/><br/>
+              <strong>Note:</strong> <code style={styles.highlight}>data</code> (the sticky one) may still show 
+              old data from a now-deleted cache entry — until a new fetch completes.
             </div>
           </div>
         </div>
