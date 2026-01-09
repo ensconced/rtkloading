@@ -295,13 +295,17 @@ function App() {
   const dispatch = useDispatch()
   const [selectedId, setSelectedId] = useState<number>(1)
   const [forceError, setForceError] = useState<boolean>(false)
+  const [pollingEnabled, setPollingEnabled] = useState<boolean>(false)
+  const [pollingInterval, setPollingInterval] = useState<number>(3000)
   const [log, setLog] = useState<LogEntry[]>([])
   const prevStateRef = useRef<string>('')
   const logContainerRef = useRef<HTMLDivElement>(null)
 
   // This is THE hook we're testing
   const queryArgs: GetItemArgs = { id: selectedId, forceError }
-  const queryResult = useGetItemQuery(queryArgs)
+  const queryResult = useGetItemQuery(queryArgs, {
+    pollingInterval: pollingEnabled ? pollingInterval : 0,
+  })
   
   const { isLoading, isFetching, isError, error, data, currentData, refetch } = queryResult
 
@@ -500,6 +504,58 @@ function App() {
             <label htmlFor="forceError" style={{ cursor: 'pointer', color: forceError ? '#f85149' : '#8b949e' }}>
               Force errors on next fetch
             </label>
+          </div>
+
+          <div style={{
+            ...styles.errorToggle,
+            borderColor: pollingEnabled ? '#238636' : '#30363d',
+            backgroundColor: pollingEnabled ? '#23863611' : 'transparent',
+          }}>
+            <input 
+              type="checkbox" 
+              id="polling" 
+              checked={pollingEnabled} 
+              onChange={() => {
+                const newValue = !pollingEnabled
+                setLog(prev => [...prev, {
+                  time: new Date().toLocaleTimeString('en-US', { 
+                    hour12: false, 
+                    hour: '2-digit', 
+                    minute: '2-digit', 
+                    second: '2-digit',
+                    fractionalSecondDigits: 3 
+                  } as Intl.DateTimeFormatOptions),
+                  event: `🔄 POLLING ${newValue ? `ENABLED (${pollingInterval}ms)` : 'DISABLED'}`,
+                  values: { isLoading, isFetching, isError, error, data, currentData }
+                }])
+                setPollingEnabled(newValue)
+              }}
+              style={styles.checkbox}
+            />
+            <label htmlFor="polling" style={{ cursor: 'pointer', color: pollingEnabled ? '#3fb950' : '#8b949e' }}>
+              Enable polling
+            </label>
+            {pollingEnabled && (
+              <select 
+                value={pollingInterval} 
+                onChange={(e) => setPollingInterval(Number(e.target.value))}
+                style={{
+                  marginLeft: 'auto',
+                  padding: '4px 8px',
+                  backgroundColor: '#21262d',
+                  border: '1px solid #30363d',
+                  borderRadius: '4px',
+                  color: '#c9d1d9',
+                  fontSize: '0.8rem',
+                }}
+              >
+                <option value={1000}>1s</option>
+                <option value={2000}>2s</option>
+                <option value={3000}>3s</option>
+                <option value={5000}>5s</option>
+                <option value={10000}>10s</option>
+              </select>
+            )}
           </div>
 
           <div style={styles.dataLabel}>Actions for current selection (id={selectedId})</div>
@@ -759,6 +815,27 @@ function App() {
               Toggling "Force errors" doesn't just change behavior — it switches you to an entirely different 
               cache entry, with its own <code style={styles.highlight}>isFetching</code>, 
               <code style={styles.highlight}>isError</code>, <code style={styles.highlight}>currentData</code>, etc.
+            </div>
+          </div>
+
+          <div style={styles.explanationItem}>
+            <div style={styles.explanationTerm}>Polling</div>
+            <div style={styles.explanationDesc}>
+              When <code style={styles.highlight}>pollingInterval</code> is set, RTK Query automatically 
+              refetches the current cache entry at that interval.
+              <br/><br/>
+              <strong>Observe:</strong> Enable polling and watch the timeline. You'll see periodic 
+              <code style={styles.highlight}>isFetching: true</code> → <code style={styles.highlight}>false</code> 
+              cycles, and <code style={styles.highlight}>data.fetchCount</code> incrementing.
+              <br/><br/>
+              <strong>Key behaviors:</strong>
+              <br/>• <code style={styles.highlight}>isLoading</code> stays <code style={styles.highlight}>false</code> 
+              during polls (data already exists)
+              <br/>• <code style={styles.highlight}>isFetching</code> becomes <code style={styles.highlight}>true</code> 
+              during each poll
+              <br/>• Polling continues even if a poll errors — try enabling both polling and "Force errors"
+              <br/>• Polling stops when you switch to a different cache entry (different args)
+              <br/>• Polling only happens while the component is mounted and the hook is subscribed
             </div>
           </div>
         </div>
